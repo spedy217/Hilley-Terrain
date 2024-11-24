@@ -4,8 +4,5 @@ Roadmap:
 * Optimizing the he** out of it
 * Possibly making it for Godot soon
 * Crafting... perhaps ;)
-* Cool
 
-Anyways, have fun with my code, Ido not care and bye.
-
-Im schleeepy. 
+Anyways, have fun with my code, I do not care and bye.
