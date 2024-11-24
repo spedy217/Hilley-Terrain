@@ -2,6 +2,8 @@ Hilley Terrain is a library for making hill like terrain in Unity. I am making a
 
 Roadmap:
 * Optimizing the he** out of it
+* Making it out of meshes instead of cubes
+* Making it have better terrain chunk generation
 * Possibly making it for Godot soon
 * Crafting... perhaps ;)
 
