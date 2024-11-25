@@ -6,27 +6,47 @@ public class Terrain : MonoBehaviour
 {
     public GameObject cube; // The cube prefab
     public GameObject player; // The player object
-    float noiseScale = 0.1f; // Controls the scale of the Perlin noise
-    float heightMultiplier = 7f; // Controls the height of the terrain
-    int mapSize = 20; // Size of each chunk
-    float chunkLoadDistance = 0.05f; // Distance to trigger new chunk generation
+    public float noiseScale = 0.1f;
+    public float heightMultiplier = 7f;
+    public float hillHeight = 1.0f;
 
+    int mapSize = 20; // Size of each chunk
+    int chunkLoadRadius = 3; // Number of chunks to load around the player
+    int chunkUnloadRadius = 5; // Unload chunks beyond this radius
+
+    private Dictionary<Vector2Int, GameObject> chunkObjects = new Dictionary<Vector2Int, GameObject>();
     private HashSet<Vector2Int> generatedChunks = new HashSet<Vector2Int>();
 
     void Start()
     {
-        GenerateChunk(0, 0); // Generate the initial chunk
+        StartCoroutine(LoadChunksCoroutine());
     }
 
     void Update()
     {
-        // Get the player's current chunk coordinates
+        // Player's current chunk
         Vector2Int playerChunk = GetChunkCoordinates(player.transform.position);
+        
+        // Load and unload chunks around the player
+        LoadChunks(playerChunk);
+        UnloadChunks(playerChunk);
+    }
 
-        // Check and generate surrounding chunks
-        for (int x = -1; x <= 1; x++)
+    IEnumerator LoadChunksCoroutine()
+    {
+        while (true)
         {
-            for (int y = -1; y <= 1; y++)
+            Vector2Int playerChunk = GetChunkCoordinates(player.transform.position);
+            LoadChunks(playerChunk);
+            yield return new WaitForSeconds(0.5f); // Small delay to prevent frame drops
+        }
+    }
+
+    void LoadChunks(Vector2Int playerChunk)
+    {
+        for (int x = -chunkLoadRadius; x <= chunkLoadRadius; x++)
+        {
+            for (int y = -chunkLoadRadius; y <= chunkLoadRadius; y++)
             {
                 Vector2Int chunkCoords = new Vector2Int(playerChunk.x + x, playerChunk.y + y);
                 if (!generatedChunks.Contains(chunkCoords))
@@ -37,19 +57,48 @@ public class Terrain : MonoBehaviour
         }
     }
 
+    void UnloadChunks(Vector2Int playerChunk)
+    {
+        List<Vector2Int> chunksToRemove = new List<Vector2Int>();
+
+        foreach (var chunk in chunkObjects)
+        {
+            float distance = Vector2Int.Distance(playerChunk, chunk.Key);
+            if (distance > chunkUnloadRadius)
+            {
+                Destroy(chunk.Value);
+                chunksToRemove.Add(chunk.Key);
+                generatedChunks.Remove(chunk.Key);
+            }
+        }
+
+        foreach (var chunkKey in chunksToRemove)
+        {
+            chunkObjects.Remove(chunkKey);
+        }
+    }
+
     void GenerateChunk(int chunkX, int chunkY)
     {
         generatedChunks.Add(new Vector2Int(chunkX, chunkY));
-        Vector3 chunkOrigin = new Vector3(chunkX * mapSize, 0, chunkY * mapSize);
+        GameObject chunkParent = new GameObject($"Chunk_{chunkX}_{chunkY}");
 
         for (int x = 0; x <= mapSize; x++)
         {
             for (int y = 0; y <= mapSize; y++)
             {
-                float height = Mathf.PerlinNoise((chunkOrigin.x + x) * noiseScale, (chunkOrigin.z + y) * noiseScale) * heightMultiplier;
-                Instantiate(cube, new Vector3(chunkOrigin.x + x, height, chunkOrigin.z + y), Quaternion.identity);
+                float rawHeight = Mathf.PerlinNoise((chunkX * mapSize + x) * noiseScale, (chunkY * mapSize + y) * noiseScale) * heightMultiplier;
+                int blockHeight = Mathf.RoundToInt(rawHeight * hillHeight);
+
+                for (int h = 0; h <= blockHeight; h++)
+                {
+                    Vector3 blockPosition = new Vector3(chunkX * mapSize + x, h, chunkY * mapSize + y);
+                    GameObject block = Instantiate(cube, blockPosition, Quaternion.identity, chunkParent.transform);
+                }
             }
         }
+
+        chunkObjects[new Vector2Int(chunkX, chunkY)] = chunkParent;
     }
 
     Vector2Int GetChunkCoordinates(Vector3 position)
