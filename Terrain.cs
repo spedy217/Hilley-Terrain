@@ -4,101 +4,141 @@ using UnityEngine;
 
 public class Terrain : MonoBehaviour
 {
-    public GameObject cube; // The cube prefab
-    public GameObject player; // The player object
+    public Material terrainMaterial; // Assign your blocky terrain material in the Inspector
+    public int mapSize = 20;
     public float noiseScale = 0.1f;
     public float heightMultiplier = 7f;
-    public float hillHeight = 1.0f;
+    public float chunkLoadDistance = 50f;
 
-    int mapSize = 20; // Size of each chunk
-    int chunkLoadRadius = 3; // Number of chunks to load around the player
-    int chunkUnloadRadius = 5; // Unload chunks beyond this radius
-
-    private Dictionary<Vector2Int, GameObject> chunkObjects = new Dictionary<Vector2Int, GameObject>();
-    private HashSet<Vector2Int> generatedChunks = new HashSet<Vector2Int>();
+    private Dictionary<Vector2Int, GameObject> generatedChunks = new Dictionary<Vector2Int, GameObject>();
 
     void Start()
     {
-        StartCoroutine(LoadChunksCoroutine());
+        GenerateChunk(0, 0);
     }
 
     void Update()
     {
-        // Player's current chunk
-        Vector2Int playerChunk = GetChunkCoordinates(player.transform.position);
-        
-        // Load and unload chunks around the player
-        LoadChunks(playerChunk);
-        UnloadChunks(playerChunk);
-    }
+        Vector2Int playerChunk = GetChunkCoordinates(Camera.main.transform.position);
 
-    IEnumerator LoadChunksCoroutine()
-    {
-        while (true)
+        // Generate surrounding chunks
+        for (int x = -1; x <= 1; x++)
         {
-            Vector2Int playerChunk = GetChunkCoordinates(player.transform.position);
-            LoadChunks(playerChunk);
-            yield return new WaitForSeconds(0.5f); // Small delay to prevent frame drops
-        }
-    }
-
-    void LoadChunks(Vector2Int playerChunk)
-    {
-        for (int x = -chunkLoadRadius; x <= chunkLoadRadius; x++)
-        {
-            for (int y = -chunkLoadRadius; y <= chunkLoadRadius; y++)
+            for (int z = -1; z <= 1; z++)
             {
-                Vector2Int chunkCoords = new Vector2Int(playerChunk.x + x, playerChunk.y + y);
-                if (!generatedChunks.Contains(chunkCoords))
+                Vector2Int chunkCoords = new Vector2Int(playerChunk.x + x, playerChunk.y + z);
+                if (!generatedChunks.ContainsKey(chunkCoords))
                 {
                     GenerateChunk(chunkCoords.x, chunkCoords.y);
                 }
             }
         }
-    }
 
-    void UnloadChunks(Vector2Int playerChunk)
-    {
-        List<Vector2Int> chunksToRemove = new List<Vector2Int>();
-
-        foreach (var chunk in chunkObjects)
-        {
-            float distance = Vector2Int.Distance(playerChunk, chunk.Key);
-            if (distance > chunkUnloadRadius)
-            {
-                Destroy(chunk.Value);
-                chunksToRemove.Add(chunk.Key);
-                generatedChunks.Remove(chunk.Key);
-            }
-        }
-
-        foreach (var chunkKey in chunksToRemove)
-        {
-            chunkObjects.Remove(chunkKey);
-        }
+        UnloadDistantChunks(playerChunk);
     }
 
     void GenerateChunk(int chunkX, int chunkY)
     {
-        generatedChunks.Add(new Vector2Int(chunkX, chunkY));
-        GameObject chunkParent = new GameObject($"Chunk_{chunkX}_{chunkY}");
+        Vector2Int chunkCoords = new Vector2Int(chunkX, chunkY);
+        GameObject chunkObj = new GameObject($"Chunk_{chunkX}_{chunkY}");
+        chunkObj.transform.position = new Vector3(chunkX * mapSize, 0, chunkY * mapSize);
 
-        for (int x = 0; x <= mapSize; x++)
+        MeshFilter meshFilter = chunkObj.AddComponent<MeshFilter>();
+        MeshRenderer meshRenderer = chunkObj.AddComponent<MeshRenderer>();
+        meshRenderer.material = terrainMaterial;
+
+        Mesh mesh = GenerateBlockyMesh(chunkX, chunkY);
+        meshFilter.mesh = mesh;
+
+        MeshCollider meshCollider = chunkObj.AddComponent<MeshCollider>();
+        meshCollider.sharedMesh = mesh;
+
+        generatedChunks.Add(chunkCoords, chunkObj);
+    }
+
+    Mesh GenerateBlockyMesh(int chunkX, int chunkY)
+    {
+        List<Vector3> vertices = new List<Vector3>();
+        List<int> triangles = new List<int>();
+        List<Vector2> uvs = new List<Vector2>();
+
+        int vertIndex = 0;
+
+        for (int x = 0; x < mapSize; x++)
         {
-            for (int y = 0; y <= mapSize; y++)
+            for (int z = 0; z < mapSize; z++)
             {
-                float rawHeight = Mathf.PerlinNoise((chunkX * mapSize + x) * noiseScale, (chunkY * mapSize + y) * noiseScale) * heightMultiplier;
-                int blockHeight = Mathf.RoundToInt(rawHeight * hillHeight);
+                int worldX = chunkX * mapSize + x;
+                int worldZ = chunkY * mapSize + z;
 
-                for (int h = 0; h <= blockHeight; h++)
-                {
-                    Vector3 blockPosition = new Vector3(chunkX * mapSize + x, h, chunkY * mapSize + y);
-                    GameObject block = Instantiate(cube, blockPosition, Quaternion.identity, chunkParent.transform);
-                }
+                float height = Mathf.Floor(Mathf.PerlinNoise(worldX * noiseScale, worldZ * noiseScale) * heightMultiplier);
+
+                // Create a cube at each (x, height, z) position
+                AddBlock(vertices, triangles, uvs, new Vector3(x, height, z), ref vertIndex);
             }
         }
 
-        chunkObjects[new Vector2Int(chunkX, chunkY)] = chunkParent;
+        Mesh mesh = new Mesh();
+        mesh.vertices = vertices.ToArray();
+        mesh.triangles = triangles.ToArray();
+        mesh.uv = uvs.ToArray();
+        mesh.RecalculateNormals();
+
+        return mesh;
+    }
+
+    void AddBlock(List<Vector3> vertices, List<int> triangles, List<Vector2> uvs, Vector3 position, ref int vertIndex)
+    {
+        // Cube vertices and triangles for each face
+        Vector3[] faceVertices = new Vector3[]
+        {
+            new Vector3(0, 0, 0), new Vector3(1, 0, 0), new Vector3(1, 1, 0), new Vector3(0, 1, 0), // Front
+            new Vector3(1, 0, 0), new Vector3(1, 0, 1), new Vector3(1, 1, 1), new Vector3(1, 1, 0), // Right
+            new Vector3(1, 0, 1), new Vector3(0, 0, 1), new Vector3(0, 1, 1), new Vector3(1, 1, 1), // Back
+            new Vector3(0, 0, 1), new Vector3(0, 0, 0), new Vector3(0, 1, 0), new Vector3(0, 1, 1), // Left
+            new Vector3(0, 1, 0), new Vector3(1, 1, 0), new Vector3(1, 1, 1), new Vector3(0, 1, 1), // Top
+            new Vector3(0, 0, 1), new Vector3(1, 0, 1), new Vector3(1, 0, 0), new Vector3(0, 0, 0)  // Bottom
+        };
+
+        int[] faceTriangles = new int[]
+        {
+            0, 2, 1, 0, 3, 2, 4, 6, 5, 4, 7, 6,
+            8, 10, 9, 8, 11, 10, 12, 14, 13, 12, 15, 14,
+            16, 18, 17, 16, 19, 18, 20, 22, 21, 20, 23, 22
+        };
+
+        // Add cube's vertices and triangles at the correct position
+        foreach (Vector3 vert in faceVertices)
+        {
+            vertices.Add(position + vert);
+        }
+
+        for (int i = 0; i < faceTriangles.Length; i++)
+        {
+            triangles.Add(faceTriangles[i] + vertIndex);
+        }
+
+        vertIndex += faceVertices.Length;
+    }
+
+    void UnloadDistantChunks(Vector2Int playerChunk)
+    {
+        List<Vector2Int> chunksToRemove = new List<Vector2Int>();
+
+        foreach (var chunk in generatedChunks)
+        {
+            float distance = Vector2.Distance(new Vector2(playerChunk.x, playerChunk.y), new Vector2(chunk.Key.x, chunk.Key.y));
+            if (distance > chunkLoadDistance / mapSize)
+            {
+                Destroy(chunk.Value);
+                chunksToRemove.Add(chunk.Key);
+            }
+        }
+
+        foreach (Vector2Int chunkCoord in chunksToRemove)
+        {
+            generatedChunks.Remove(chunkCoord);
+        }
     }
 
     Vector2Int GetChunkCoordinates(Vector3 position)
