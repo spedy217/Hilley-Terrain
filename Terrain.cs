@@ -2,13 +2,13 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class Terrain : MonoBehaviour
+public class TerrainGeneration : MonoBehaviour
 {
     public Material terrainMaterial; // Assign your blocky terrain material in the Inspector
-    public int mapSize = 20;
-    public float noiseScale = 0.1f;
-    public float heightMultiplier = 7f;
-    public float chunkLoadDistance = 50f;
+    int mapSize = 20;
+    float noiseScale = 0.1f;
+    float heightMultiplier = 5f;
+    float chunkLoadDistance = 50f;
 
     private Dictionary<Vector2Int, GameObject> generatedChunks = new Dictionary<Vector2Int, GameObject>();
 
