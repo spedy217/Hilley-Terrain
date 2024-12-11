@@ -4,11 +4,19 @@ using UnityEngine;
 
 public class TerrainGeneration : MonoBehaviour
 {
-    public Material terrainMaterial; // Assign your blocky terrain material in the Inspector
-    int mapSize = 20;
-    float noiseScale = 0.1f;
-    float heightMultiplier = 5f;
-    float chunkLoadDistance = 50f;
+    [System.Serializable]
+    public class Biome
+    {
+        public string name;
+        public Material material;
+    }
+
+    public Biome[] biomes; // Array to hold different biomes
+    public int mapSize = 20;
+    public float chunkLoadDistance = 50f;
+    public float biomeFrequency = 0.1f; // Frequency for biome variation
+    public float noiseScale = 0.1f; // Fixed noise scale for all biomes
+    public float heightMultiplier = 5f; // Fixed height multiplier for all biomes
 
     private Dictionary<Vector2Int, GameObject> generatedChunks = new Dictionary<Vector2Int, GameObject>();
 
@@ -45,7 +53,9 @@ public class TerrainGeneration : MonoBehaviour
 
         MeshFilter meshFilter = chunkObj.AddComponent<MeshFilter>();
         MeshRenderer meshRenderer = chunkObj.AddComponent<MeshRenderer>();
-        meshRenderer.material = terrainMaterial;
+
+        Biome assignedBiome = DetermineBiome(chunkX, chunkY);
+        meshRenderer.material = assignedBiome.material;
 
         Mesh mesh = GenerateBlockyMesh(chunkX, chunkY);
         meshFilter.mesh = mesh;
@@ -54,6 +64,13 @@ public class TerrainGeneration : MonoBehaviour
         meshCollider.sharedMesh = mesh;
 
         generatedChunks.Add(chunkCoords, chunkObj);
+    }
+
+    Biome DetermineBiome(int chunkX, int chunkY)
+    {
+        float biomeValue = Mathf.PerlinNoise(chunkX * biomeFrequency, chunkY * biomeFrequency);
+        int biomeIndex = Mathf.FloorToInt(biomeValue * biomes.Length);
+        return biomes[biomeIndex % biomes.Length];
     }
 
     Mesh GenerateBlockyMesh(int chunkX, int chunkY)
@@ -92,19 +109,19 @@ public class TerrainGeneration : MonoBehaviour
         // Cube vertices and triangles for each face
         Vector3[] faceVertices = new Vector3[]
         {
-            new Vector3(0, 0, 0), new Vector3(1, 0, 0), new Vector3(1, 1, 0), new Vector3(0, 1, 0), // Front
-            new Vector3(1, 0, 0), new Vector3(1, 0, 1), new Vector3(1, 1, 1), new Vector3(1, 1, 0), // Right
-            new Vector3(1, 0, 1), new Vector3(0, 0, 1), new Vector3(0, 1, 1), new Vector3(1, 1, 1), // Back
-            new Vector3(0, 0, 1), new Vector3(0, 0, 0), new Vector3(0, 1, 0), new Vector3(0, 1, 1), // Left
-            new Vector3(0, 1, 0), new Vector3(1, 1, 0), new Vector3(1, 1, 1), new Vector3(0, 1, 1), // Top
-            new Vector3(0, 0, 1), new Vector3(1, 0, 1), new Vector3(1, 0, 0), new Vector3(0, 0, 0)  // Bottom
+        new Vector3(0, 0, 0), new Vector3(1, 0, 0), new Vector3(1, 1, 0), new Vector3(0, 1, 0), // Front
+        new Vector3(1, 0, 0), new Vector3(1, 0, 1), new Vector3(1, 1, 1), new Vector3(1, 1, 0), // Right
+        new Vector3(1, 0, 1), new Vector3(0, 0, 1), new Vector3(0, 1, 1), new Vector3(1, 1, 1), // Back
+        new Vector3(0, 0, 1), new Vector3(0, 0, 0), new Vector3(0, 1, 0), new Vector3(0, 1, 1), // Left
+        new Vector3(0, 1, 0), new Vector3(1, 1, 0), new Vector3(1, 1, 1), new Vector3(0, 1, 1), // Top
+        new Vector3(0, 0, 1), new Vector3(1, 0, 1), new Vector3(1, 0, 0), new Vector3(0, 0, 0)  // Bottom
         };
 
         int[] faceTriangles = new int[]
         {
-            0, 2, 1, 0, 3, 2, 4, 6, 5, 4, 7, 6,
-            8, 10, 9, 8, 11, 10, 12, 14, 13, 12, 15, 14,
-            16, 18, 17, 16, 19, 18, 20, 22, 21, 20, 23, 22
+        0, 2, 1, 0, 3, 2, 4, 6, 5, 4, 7, 6,
+        8, 10, 9, 8, 11, 10, 12, 14, 13, 12, 15, 14,
+        16, 18, 17, 16, 19, 18, 20, 22, 21, 20, 23, 22
         };
 
         // Add cube's vertices and triangles at the correct position
